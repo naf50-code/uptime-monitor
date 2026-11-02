@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.db.models import MonitorState
+from app.db.models import CheckOutcome, MonitorState
 
 
 def validate_target_url(value: str) -> str:
@@ -110,3 +110,15 @@ class MonitorResponse(BaseModel):
     current_state: MonitorState
     next_check_at: datetime
     created_at: datetime
+
+
+class CheckResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    monitor_id: UUID
+    checked_at: datetime
+    latency_ms: int | None
+    status_code: int | None
+    outcome: CheckOutcome
+    error_detail: str | None

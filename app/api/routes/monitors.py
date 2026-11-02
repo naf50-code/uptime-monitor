@@ -7,8 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_account, get_db_session
-from app.api.schemas import MonitorCreate, MonitorResponse, MonitorUpdate
-from app.db.models import Account, Monitor
+from app.api.schemas import (
+    CheckResultResponse,
+    MonitorCreate,
+    MonitorResponse,
+    MonitorUpdate,
+)
+from app.db.models import Account, CheckResult, Monitor
 
 router = APIRouter(prefix="/monitors", tags=["monitors"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -66,6 +71,23 @@ async def get_monitor(
     monitor_id: UUID, session: DbSession, account: CurrentAccount
 ) -> Monitor:
     return await get_visible_monitor(monitor_id, session, account)
+
+
+@router.get("/{monitor_id}/results", response_model=list[CheckResultResponse])
+async def list_monitor_results(
+    monitor_id: UUID,
+    session: DbSession,
+    account: CurrentAccount,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[CheckResult]:
+    await get_visible_monitor(monitor_id, session, account)
+    result = await session.execute(
+        select(CheckResult)
+        .where(CheckResult.monitor_id == monitor_id)
+        .order_by(CheckResult.checked_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 @router.patch("/{monitor_id}", response_model=MonitorResponse)

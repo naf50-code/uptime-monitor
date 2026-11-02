@@ -11,7 +11,7 @@ A portfolio project for monitoring API availability and response time.
 
 ## Project status
 
-Current milestone: FastAPI health endpoints, PostgreSQL models and migration, JWT signup/login, and owner-scoped monitor management. Bounded asynchronous checks are planned next.
+Current milestone: FastAPI health endpoints, PostgreSQL models and migration, JWT signup/login, owner-scoped monitor management, and a bounded asynchronous check runner.
 
 ## Architecture
 
@@ -34,6 +34,8 @@ flowchart LR
 - `GET /monitors/{id}` — view a monitor (authentication required)
 - `PATCH /monitors/{id}` — update a monitor (authentication required)
 - `DELETE /monitors/{id}` — delete a monitor (authentication required)
+- `GET /monitors/{id}/results` — view recent check history (authentication required)
+- `POST /internal/run-due-checks` — run due checks (scheduler bearer token required)
 - `GET /health` — API process health
 - `GET /health/database` — PostgreSQL connectivity
 

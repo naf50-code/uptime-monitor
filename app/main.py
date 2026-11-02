@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.internal import router as internal_router
 from app.api.routes.monitors import router as monitors_router
 from app.db.session import engine
 
@@ -16,6 +17,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(auth_router)
+app.include_router(internal_router)
 app.include_router(monitors_router)
 
 
