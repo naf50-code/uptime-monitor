@@ -7,7 +7,7 @@ from sqlalchemy import text
 from app.api.routes.auth import router as auth_router
 from app.api.routes.internal import router as internal_router
 from app.api.routes.monitors import router as monitors_router
-from app.db.session import engine
+from app.db.session import database_url, engine
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,10 @@ async def database_health_check() -> dict[str, str]:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
     except Exception as exc:
-        logger.exception("Database health check failed")
+        logger.exception(
+            "Database health check failed (host=%s, port=%s)",
+            database_url.host,
+            database_url.port or 5432,
+        )
         raise HTTPException(status_code=503, detail="Database unavailable") from exc
     return {"status": "ok", "database": "reachable"}
