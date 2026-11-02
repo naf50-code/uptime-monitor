@@ -16,6 +16,7 @@ The demo uses free-tier services. The API or database may be cold after a period
 - Owner-scoped monitor CRUD and paginated monitor listing.
 - Asynchronous HTTP checks with bounded concurrency, request timeouts, one retry for transient network errors, and TLS/DNS/HTTP error classification.
 - Public destination checks to reduce server-side request forgery (SSRF) risk.
+- Optional Discord webhook notifications when a monitor becomes `down` or recovers to `up`.
 - PostgreSQL check history with response code, latency, outcome, and error detail.
 - Failure dampening: a monitor becomes `down` after three consecutive failures and recovers after two consecutive successes.
 - GitHub Actions schedules due checks every five minutes and runs linting, unit tests, and a Docker build.
@@ -49,7 +50,7 @@ stateDiagram-v2
     degraded --> up: successful check
 ```
 
-This initial version records state changes but does not yet send email, SMS, or webhook alerts.
+Discord alerts are sent only for critical `down` and recovery transitions, not for the first degraded result. Delivery is best-effort: failures are logged without exposing the webhook token, but are not queued for a later retry.
 
 ## Data model and indexing
 
@@ -125,6 +126,7 @@ Configure these variables in Vercel for the Production environment:
 - `DATABASE_URL`: Neon PostgreSQL connection string.
 - `JWT_SECRET`: long, random signing secret.
 - `SCHEDULER_TOKEN`: long, random scheduler secret.
+- `ALERT_WEBHOOK_URL`: optional Discord webhook URL for down and recovery notifications. Store it as a Secret.
 
 Keep credentials out of source control, screenshots, and issue comments. `.env` is ignored by Git.
 

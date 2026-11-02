@@ -6,8 +6,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.db.models import CheckOutcome, CheckResult, Monitor
+from app.db.models import CheckOutcome, CheckResult, Monitor, MonitorState
 from app.db.session import SessionFactory
+from app.services.alerts import StateAlert, send_state_alerts
 from app.services.checker import (
     MAX_CONCURRENT_CHECKS,
     MAX_DUE_MONITORS_PER_RUN,
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class MonitorSnapshot:
     id: UUID
+    name: str
     method: str
     url: str
     timeout_ms: int
@@ -43,6 +45,7 @@ async def run_due_checks(force: bool = False) -> dict[str, int]:
         snapshots = [
             MonitorSnapshot(
                 id=monitor.id,
+                name=monitor.name,
                 method=monitor.method,
                 url=monitor.url,
                 timeout_ms=monitor.timeout_ms,
@@ -69,6 +72,7 @@ async def run_due_checks(force: bool = False) -> dict[str, int]:
         await asyncio.gather(*(run_one(snapshot) for snapshot in snapshots))
 
     transitions = 0
+    alerts: list[StateAlert] = []
     async with SessionFactory() as session:
         for snapshot, observation in observations:
             result = await session.execute(
@@ -113,7 +117,21 @@ async def run_due_checks(force: bool = False) -> dict[str, int]:
                         "to_state": next_state.value,
                     },
                 )
+                if next_state == MonitorState.DOWN or (
+                    previous_state == MonitorState.DOWN and next_state == MonitorState.UP
+                ):
+                    alerts.append(
+                        StateAlert(
+                            monitor_id=monitor.id,
+                            name=monitor.name,
+                            url=monitor.url,
+                            previous_state=previous_state,
+                            next_state=next_state,
+                        )
+                    )
         await session.commit()
+
+    await send_state_alerts(alerts)
 
     return {
         "claimed": len(snapshots),
