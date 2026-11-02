@@ -39,31 +39,6 @@ jobs:
       - name: Build Docker image
         run: docker build -t uptime-monitor:${{ github.sha }} .
 
-  deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: quality
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-          cache: pip
-
-      - name: Migrate database and deploy to Render
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: |
-          if [ -z "$DATABASE_URL" ] || [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "::notice::Set DATABASE_URL and RENDER_DEPLOY_HOOK secrets to enable deployment."
-            exit 0
-          fi
-          python -m pip install --no-cache-dir -r requirements.txt
-          python -m alembic upgrade head
-          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
-
   scheduled-checks:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
