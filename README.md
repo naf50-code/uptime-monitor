@@ -1,66 +1,142 @@
-# Uptime Monitor
+# Distributed Uptime & API Performance Monitor
 
-A portfolio project for monitoring API availability and response time.
+A small, serverless uptime monitoring service built with FastAPI, PostgreSQL, and asynchronous HTTP checks. It lets users register, create monitors, and inspect recent availability and latency results.
 
-## Planned stack
+## Live demo
 
-- Python 3.14 and FastAPI
-- PostgreSQL
-- Docker
-- GitHub Actions
+- **Interactive API docs:** https://uptime-monitor-mauve.vercel.app/docs
+- **API health:** https://uptime-monitor-mauve.vercel.app/health
+- **Database health:** https://uptime-monitor-mauve.vercel.app/health/database
 
-## Project status
+The demo uses free-tier services. The API or database may be cold after a period without traffic, and scheduled runs can be delayed. This project is a portfolio demo and does not provide a production uptime guarantee.
 
-Current milestone: FastAPI health endpoints, PostgreSQL models and migration, JWT signup/login, owner-scoped monitor management, and a bounded asynchronous check runner.
+## Features
+
+- JWT authentication with Argon2 password hashing.
+- Owner-scoped monitor CRUD and paginated monitor listing.
+- Asynchronous HTTP checks with bounded concurrency, request timeouts, one retry for transient network errors, and TLS/DNS/HTTP error classification.
+- Public destination checks to reduce server-side request forgery (SSRF) risk.
+- PostgreSQL check history with response code, latency, outcome, and error detail.
+- Failure dampening: a monitor becomes `down` after three consecutive failures and recovers after two consecutive successes.
+- GitHub Actions schedules due checks every five minutes and runs linting, unit tests, and a Docker build.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    User --> API[FastAPI]
-    API --> DB[(PostgreSQL)]
-    Scheduler[GitHub Actions] -->|protected trigger| API
-    API --> CheckService[Async check service]
-    CheckService --> MonitoredAPI[Monitored APIs]
+    Client[User / API client] -->|HTTPS + JWT| API[FastAPI on Vercel]
+    API -->|async SQLAlchemy| DB[(Neon PostgreSQL)]
+    GH[GitHub Actions schedule] -->|Bearer scheduler token| Internal[Protected scheduler endpoint]
+    Internal --> Runner[Bounded async check runner]
+    Runner -->|HTTPS checks| Target[Public monitored APIs]
+    Runner -->|results and state| DB
 ```
 
-## API endpoints
+Vercel deploys the FastAPI app from the GitHub repository. Neon stores accounts, monitors, and results. A scheduled GitHub Actions workflow calls the protected API endpoint; Vercel Hobby cron is not used because it only supports daily schedules.
 
-- `POST /auth/register` — create an account
-- `POST /auth/login` — receive a short-lived bearer token
-- `GET /auth/me` — view the authenticated account
-- `POST /monitors` — create a monitor (authentication required)
-- `GET /monitors` — list your monitors (authentication required)
-- `GET /monitors/{id}` — view a monitor (authentication required)
-- `PATCH /monitors/{id}` — update a monitor (authentication required)
-- `DELETE /monitors/{id}` — delete a monitor (authentication required)
-- `GET /monitors/{id}/results` — view recent check history (authentication required)
-- `POST /internal/run-due-checks` — run due checks (scheduler bearer token required)
-- `GET /health` — API process health
-- `GET /health/database` — PostgreSQL connectivity
+## Check processing and state changes
 
-## Free-tier deployment note
+The scheduler claims at most 100 due monitors per run. It uses a semaphore and HTTPX connection limits to run no more than 20 checks at once. Each target has a configured timeout. Transient network errors get one short retry; non-retryable outcomes are recorded without retrying. Results are persisted after the network calls complete.
 
-This is a portfolio demo. Free hosting may sleep when idle, and scheduled jobs may be delayed. It does not provide a production uptime guarantee.
+```mermaid
+stateDiagram-v2
+    [*] --> unknown
+    unknown --> up: successful check
+    unknown --> degraded: first failure
+    up --> degraded: first failure
+    degraded --> down: third consecutive failure
+    down --> up: second consecutive success
+    degraded --> up: successful check
+```
+
+This initial version records state changes but does not yet send email, SMS, or webhook alerts.
+
+## Data model and indexing
+
+- `accounts`: unique email, password hash, role, and creation time.
+- `monitors`: owner foreign key, target URL/method, interval, timeout, current state, counters, and next due time.
+- `check_results`: append-only observations with latency, HTTP status, outcome, and timestamp.
+
+Indexes support due-monitor selection, account monitor listing, and recent result history. Account deletion cascades to its monitors; monitor deletion cascades to its check results. Alembic owns schema changes.
+
+## API overview
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /auth/register` | Create an account |
+| `POST /auth/login` | Get a bearer access token |
+| `GET /auth/me` | Get the authenticated account |
+| `POST /monitors` | Create a monitor |
+| `GET /monitors` | List owned monitors |
+| `GET /monitors/{monitor_id}` | Get a monitor |
+| `GET /monitors/{monitor_id}/results` | Get recent check history |
+| `PATCH /monitors/{monitor_id}` | Update a monitor |
+| `DELETE /monitors/{monitor_id}` | Delete a monitor |
+| `POST /internal/run-due-checks` | Trigger due checks with the scheduler bearer token |
+| `GET /health` | Check API process health |
+| `GET /health/database` | Check PostgreSQL connectivity |
+
+Interactive requests and schemas are available at `/docs`.
+
+## Tech stack
+
+- Python 3.14, FastAPI, Pydantic
+- SQLAlchemy 2 async ORM, asyncpg, Alembic
+- Neon PostgreSQL
+- HTTPX for asynchronous outbound checks
+- JWT and Argon2 password hashing
+- Docker multi-stage build
+- GitHub Actions for lint, tests, image build, and scheduled checks
+- Vercel Hobby for the API deployment
+
+## Run locally
+
+Use Python 3.14 and a PostgreSQL database (Neon works for local development).
+
+```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+```
+
+Edit `.env` and set `DATABASE_URL`, `JWT_SECRET`, and `SCHEDULER_TOKEN`. Keep the file private and never commit it. Apply migrations and start the server:
+
+```powershell
+python -m alembic upgrade head
+python -m uvicorn app.main:app
+```
+
+Open `http://127.0.0.1:8000/docs` for the interactive API. The scheduler endpoint needs the `SCHEDULER_TOKEN` as a bearer token.
 
 ## CI and deployment
 
-GitHub Actions runs Ruff, the unit suite, and a Docker build on pushes and pull requests. A push to `main` runs the Alembic migration and triggers Render when deployment secrets are configured. A scheduled workflow requests due checks every five minutes; GitHub may delay scheduled runs.
+- GitHub Actions runs Ruff, the unit tests, and a Docker image build for pushes and pull requests.
+- Vercel's GitHub integration deploys commits from `main` to the production API.
+- A scheduled GitHub Actions run calls `/internal/run-due-checks` every five minutes. GitHub may delay scheduled runs.
 
-Add these repository secrets to enable deployment and scheduled checks:
+Configure these values as GitHub Actions repository secrets for scheduled checks:
 
-- `DATABASE_URL` — Neon PostgreSQL connection string used by the migration job.
-- `RENDER_DEPLOY_HOOK` — Render deploy hook URL.
-- `MONITOR_API_URL` — base URL of the deployed API, without a trailing slash.
-- `SCHEDULER_TOKEN` — same token configured on the API service.
+- `MONITOR_API_URL`: production base URL without a trailing slash.
+- `SCHEDULER_TOKEN`: the same secret configured in Vercel.
 
-Configure `DATABASE_URL`, `JWT_SECRET`, and `SCHEDULER_TOKEN` in the Render service environment as well. Never commit `.env` or copy secret values into issues or logs.
+Configure these variables in Vercel for the Production environment:
 
-## Local development
+- `DATABASE_URL`: Neon PostgreSQL connection string.
+- `JWT_SECRET`: long, random signing secret.
+- `SCHEDULER_TOKEN`: long, random scheduler secret.
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL` to your PostgreSQL connection string.
-2. Install dependencies: `python -m pip install -r requirements.txt`.
-3. Apply the database schema: `alembic upgrade head`.
-4. Start the API: `python -m uvicorn app.main:app`.
+Keep credentials out of source control, screenshots, and issue comments. `.env` is ignored by Git.
 
-The `.env` file contains secrets and must never be committed.
+## Architectural decisions
+
+1. **PostgreSQL is the source of truth.** Monitor state and check history are persisted together so the API can serve current status and recent observations.
+2. **The scheduler is stateless.** GitHub Actions invokes an authenticated API route; the database selects and locks due rows, allowing multiple invocations without requiring a continuously running worker.
+3. **Concurrency is bounded.** Each run is limited to 100 monitors and 20 active checks to control memory, sockets, and database pressure on small free-tier services.
+4. **Failure state is dampened.** Consecutive-failure and recovery thresholds avoid flipping state on a single transient error.
+5. **The checker rejects private destinations.** URL checks and DNS resolution checks reduce SSRF risk when users submit targets.
+6. **Free-tier hosting has limits.** Cold starts, best-effort schedule timing, and provider quotas are accepted trade-offs for a no-cost portfolio deployment.
+
+## Current verification
+
+The live demo has been exercised end-to-end: account authentication, monitor listing, scheduled checks, and check-history retrieval. The current example monitor has returned HTTP 200 responses and is in the `up` state.
