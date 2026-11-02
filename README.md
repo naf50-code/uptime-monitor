@@ -4,6 +4,7 @@ A small, serverless uptime monitoring service built with FastAPI, PostgreSQL, an
 
 ## Live demo
 
+- **Dashboard:** https://uptime-monitor-mauve.vercel.app/
 - **Interactive API docs:** https://uptime-monitor-mauve.vercel.app/docs
 - **API health:** https://uptime-monitor-mauve.vercel.app/health
 - **Database health:** https://uptime-monitor-mauve.vercel.app/health/database
@@ -19,6 +20,7 @@ The demo uses free-tier services. The API or database may be cold after a period
 - Optional Discord webhook notifications when a monitor becomes `down` or recovers to `up`.
 - PostgreSQL check history with response code, latency, outcome, and error detail.
 - Per-monitor summary metrics for a 1-hour to 30-day window, including sample-based success rate, average latency, and p95 latency.
+- Same-origin dashboard for sign-in, monitor management, current state, and on-demand 24-hour metrics.
 - Failure dampening: a monitor becomes `down` after three consecutive failures and recovers after two consecutive successes.
 - GitHub Actions schedules due checks every five minutes and runs linting, unit tests, and a Docker build.
 
