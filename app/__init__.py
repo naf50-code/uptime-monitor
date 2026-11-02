@@ -1,0 +1,1 @@
+"""Uptime Monitor application package."""
