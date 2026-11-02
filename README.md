@@ -4,7 +4,7 @@ A portfolio project for monitoring API availability and response time.
 
 ## Planned stack
 
-- Python and FastAPI
+- Python 3.14 and FastAPI
 - PostgreSQL
 - Docker
 - GitHub Actions

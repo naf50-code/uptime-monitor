@@ -12,22 +12,19 @@ DATABASE_URL = os.getenv(
 )
 
 database_url = make_url(DATABASE_URL)
-if database_url.drivername in {"postgres", "postgresql"}:
-    database_url = database_url.set(drivername="postgresql+asyncpg")
+if database_url.drivername in {"postgres", "postgresql", "postgresql+asyncpg"}:
+    database_url = database_url.set(drivername="postgresql+psycopg")
 
-# Neon provides libpq-style URL options. asyncpg uses its own SSL option names.
-query_options = dict(database_url.query)
-query_options.pop("sslmode", None)
-query_options.pop("channel_binding", None)
-database_url = database_url.set(query=query_options)
-
-connect_args = {"ssl": True} if (database_url.host or "").endswith(".neon.tech") else {}
+# Require TLS for Neon while preserving Neon/libpq options in its connection URL.
+if (database_url.host or "").endswith(".neon.tech") and "sslmode" not in database_url.query:
+    query_options = dict(database_url.query)
+    query_options["sslmode"] = "require"
+    database_url = database_url.set(query=query_options)
 
 engine = create_async_engine(
     database_url,
     pool_size=5,
     max_overflow=0,
     pool_pre_ping=True,
-    connect_args=connect_args,
 )
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
