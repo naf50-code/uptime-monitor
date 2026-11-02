@@ -11,7 +11,7 @@ A portfolio project for monitoring API availability and response time.
 
 ## Project status
 
-This project is being built in phases. The first milestone is a small API that can create monitors and run bounded, asynchronous HTTP checks.
+Current milestone: FastAPI health endpoints, PostgreSQL models, and an Alembic migration for the initial schema. Monitor management and bounded asynchronous checks are planned next.
 
 ## Architecture
 
@@ -27,3 +27,12 @@ flowchart LR
 ## Free-tier deployment note
 
 This is a portfolio demo. Free hosting may sleep when idle, and scheduled jobs may be delayed. It does not provide a production uptime guarantee.
+
+## Local development
+
+1. Copy `.env.example` to `.env` and set `DATABASE_URL` to your PostgreSQL connection string.
+2. Install dependencies: `python -m pip install -r requirements.txt`.
+3. Apply the database schema: `alembic upgrade head`.
+4. Start the API: `python -m uvicorn app.main:app`.
+
+The `.env` file contains secrets and must never be committed.

@@ -42,6 +42,9 @@ class CheckOutcome(StrEnum):
 
 class Account(Base):
     __tablename__ = "accounts"
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'admin')", name="ck_account_role"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -90,7 +93,11 @@ class Monitor(Base):
     consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     consecutive_successes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     current_state: Mapped[MonitorState] = mapped_column(
-        Enum(MonitorState, name="monitor_state"),
+        Enum(
+            MonitorState,
+            name="monitor_state",
+            values_callable=lambda enum_type: [item.value for item in enum_type],
+        ),
         nullable=False,
         default=MonitorState.UNKNOWN,
     )
@@ -126,7 +133,12 @@ class CheckResult(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     status_code: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[CheckOutcome] = mapped_column(
-        Enum(CheckOutcome, name="check_outcome"), nullable=False
+        Enum(
+            CheckOutcome,
+            name="check_outcome",
+            values_callable=lambda enum_type: [item.value for item in enum_type],
+        ),
+        nullable=False,
     )
     error_detail: Mapped[str | None] = mapped_column(Text)
 
