@@ -11,7 +11,7 @@ A portfolio project for monitoring API availability and response time.
 
 ## Project status
 
-Current milestone: FastAPI health endpoints, PostgreSQL models, and an Alembic migration for the initial schema. Monitor management and bounded asynchronous checks are planned next.
+Current milestone: FastAPI health endpoints, PostgreSQL models, an Alembic migration, and JWT signup/login. Monitor management and bounded asynchronous checks are planned next.
 
 ## Architecture
 
@@ -23,6 +23,14 @@ flowchart LR
     API --> CheckService[Async check service]
     CheckService --> MonitoredAPI[Monitored APIs]
 ```
+
+## API endpoints
+
+- `POST /auth/register` — create an account
+- `POST /auth/login` — receive a short-lived bearer token
+- `GET /auth/me` — view the authenticated account
+- `GET /health` — API process health
+- `GET /health/database` — PostgreSQL connectivity
 
 ## Free-tier deployment note
 
