@@ -122,3 +122,15 @@ class CheckResultResponse(BaseModel):
     status_code: int | None
     outcome: CheckOutcome
     error_detail: str | None
+
+
+class MonitorSummaryResponse(BaseModel):
+    monitor_id: UUID
+    window_hours: int
+    total_checks: int
+    successful_checks: int
+    failed_checks: int
+    uptime_percentage: float
+    average_latency_ms: float | None
+    p95_latency_ms: float | None
+    last_checked_at: datetime | None

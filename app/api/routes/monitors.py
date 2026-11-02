@@ -1,9 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_account, get_db_session
@@ -11,9 +11,10 @@ from app.api.schemas import (
     CheckResultResponse,
     MonitorCreate,
     MonitorResponse,
+    MonitorSummaryResponse,
     MonitorUpdate,
 )
-from app.db.models import Account, CheckResult, Monitor
+from app.db.models import Account, CheckOutcome, CheckResult, Monitor
 
 router = APIRouter(prefix="/monitors", tags=["monitors"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -88,6 +89,65 @@ async def list_monitor_results(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+@router.get("/{monitor_id}/summary", response_model=MonitorSummaryResponse)
+async def get_monitor_summary(
+    monitor_id: UUID,
+    session: DbSession,
+    account: CurrentAccount,
+    hours: Annotated[int, Query(ge=1, le=720)] = 24,
+) -> MonitorSummaryResponse:
+    """Summarize sampled check success and successful-response latency."""
+    await get_visible_monitor(monitor_id, session, account)
+    window_end = datetime.now(UTC)
+    window_start = window_end - timedelta(hours=hours)
+    filters = (
+        CheckResult.monitor_id == monitor_id,
+        CheckResult.checked_at >= window_start,
+    )
+
+    summary_result = await session.execute(
+        select(
+            func.count(CheckResult.id),
+            func.count(CheckResult.id).filter(
+                CheckResult.outcome == CheckOutcome.SUCCESS
+            ),
+            func.avg(CheckResult.latency_ms).filter(
+                CheckResult.outcome == CheckOutcome.SUCCESS
+            ),
+            func.max(CheckResult.checked_at),
+        ).where(*filters)
+    )
+    total_checks, successful_checks, average_latency, last_checked_at = (
+        summary_result.one()
+    )
+
+    p95_result = await session.execute(
+        select(func.percentile_cont(0.95).within_group(CheckResult.latency_ms)).where(
+            *filters,
+            CheckResult.outcome == CheckOutcome.SUCCESS,
+            CheckResult.latency_ms.is_not(None),
+        )
+    )
+    p95_latency = p95_result.scalar_one()
+    uptime_percentage = (
+        round(successful_checks * 100.0 / total_checks, 2) if total_checks else 0.0
+    )
+
+    return MonitorSummaryResponse(
+        monitor_id=monitor_id,
+        window_hours=hours,
+        total_checks=total_checks,
+        successful_checks=successful_checks,
+        failed_checks=total_checks - successful_checks,
+        uptime_percentage=uptime_percentage,
+        average_latency_ms=(
+            round(float(average_latency), 2) if average_latency is not None else None
+        ),
+        p95_latency_ms=round(float(p95_latency), 2) if p95_latency is not None else None,
+        last_checked_at=last_checked_at,
+    )
 
 
 @router.patch("/{monitor_id}", response_model=MonitorResponse)

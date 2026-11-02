@@ -18,6 +18,7 @@ The demo uses free-tier services. The API or database may be cold after a period
 - Public destination checks to reduce server-side request forgery (SSRF) risk.
 - Optional Discord webhook notifications when a monitor becomes `down` or recovers to `up`.
 - PostgreSQL check history with response code, latency, outcome, and error detail.
+- Per-monitor summary metrics for a 1-hour to 30-day window, including sample-based success rate, average latency, and p95 latency.
 - Failure dampening: a monitor becomes `down` after three consecutive failures and recovers after two consecutive successes.
 - GitHub Actions schedules due checks every five minutes and runs linting, unit tests, and a Docker build.
 
@@ -60,6 +61,8 @@ Discord alerts are sent only for critical `down` and recovery transitions, not f
 
 Indexes support due-monitor selection, account monitor listing, and recent result history. Account deletion cascades to its monitors; monitor deletion cascades to its check results. Alembic owns schema changes.
 
+The summary's uptime percentage is the percentage of successful checks in the selected window; it is sample-based, not time-weighted. Average and p95 latency use successful checks with recorded latency. The default window is 24 hours, and requests can select 1 to 720 hours.
+
 ## API overview
 
 | Endpoint | Purpose |
@@ -71,6 +74,7 @@ Indexes support due-monitor selection, account monitor listing, and recent resul
 | `GET /monitors` | List owned monitors |
 | `GET /monitors/{monitor_id}` | Get a monitor |
 | `GET /monitors/{monitor_id}/results` | Get recent check history |
+| `GET /monitors/{monitor_id}/summary?hours=24` | Get sample-based uptime and latency summary |
 | `PATCH /monitors/{monitor_id}` | Update a monitor |
 | `DELETE /monitors/{monitor_id}` | Delete a monitor |
 | `POST /internal/run-due-checks` | Trigger due checks with the scheduler bearer token |
